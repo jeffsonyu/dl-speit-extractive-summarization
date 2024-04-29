@@ -36,6 +36,7 @@ with open("data/test_labels_naive_baseline.json", "w") as file:
 # text_baseline: utterances are embedded with SentenceTransformer, then train a classifier.
 #####
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import f1_score
 from sentence_transformers import SentenceTransformer
 bert = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -74,20 +75,10 @@ clf.fit(X_training, y_training)
     
 # with open("data/test_labels_text_baseline.json", "w") as file:
 #     json.dump(test_labels, file, indent=4)
-    
-    
-y_train_pred_list = []
-for transcription_id in training_set:
-    with open(path_to_training / f"{transcription_id}.json", "r") as file:
-        transcription = json.load(file)
-    
-    X_training = []
-    for utterance in transcription:
-        X_training.append(utterance["speaker"] + ": " + utterance["text"])
-    X_training = bert.encode(X_training)
-    y_train_pred = clf.predict(X_training)
-    y_train_pred_list += y_train_pred.tolist()
 
+y_train_pred_list = clf.predict(X_training).tolist()
 acc = sum([y == y_hat for y, y_hat in zip(y_training, y_train_pred_list)]) / len(y_train_pred_list)
 print(acc)
 
+f1 = f1_score(y_training, y_train_pred_list)
+print(f1)
