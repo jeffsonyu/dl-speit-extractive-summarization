@@ -57,19 +57,37 @@ X_training = bert.encode(X_training, show_progress_bar=True)
 clf = DecisionTreeClassifier(random_state=0)
 clf.fit(X_training, y_training)
 
-test_labels = {}
-for transcription_id in test_set:
-    with open(path_to_test / f"{transcription_id}.json", "r") as file:
+# test_labels = {}
+# for transcription_id in test_set:
+#     with open(path_to_test / f"{transcription_id}.json", "r") as file:
+#         transcription = json.load(file)
+    
+#     X_test = []
+#     for utterance in transcription:
+#         X_test.append(utterance["speaker"] + ": " + utterance["text"])
+    
+#     X_test = bert.encode(X_test)
+
+#     y_test = clf.predict(X_test)
+#     test_labels[transcription_id] = y_test.tolist()
+
+    
+# with open("data/test_labels_text_baseline.json", "w") as file:
+#     json.dump(test_labels, file, indent=4)
+    
+    
+y_train_pred_list = []
+for transcription_id in training_set:
+    with open(path_to_training / f"{transcription_id}.json", "r") as file:
         transcription = json.load(file)
     
-    X_test = []
+    X_training = []
     for utterance in transcription:
-        X_test.append(utterance["speaker"] + ": " + utterance["text"])
-    
-    X_test = bert.encode(X_test)
+        X_training.append(utterance["speaker"] + ": " + utterance["text"])
+    X_training = bert.encode(X_training)
+    y_train_pred = clf.predict(X_training)
+    y_train_pred_list += y_train_pred.tolist()
 
-    y_test = clf.predict(X_test)
-    test_labels[transcription_id] = y_test.tolist()
+acc = sum([y == y_hat for y, y_hat in zip(y_training, y_train_pred_list)]) / len(y_train_pred_list)
+print(acc)
 
-with open("data/test_labels_text_baseline.json", "w") as file:
-    json.dump(test_labels, file, indent=4)
