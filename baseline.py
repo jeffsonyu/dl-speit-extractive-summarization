@@ -4,8 +4,8 @@ from pathlib import Path
 def flatten(list_of_list):
     return [item for sublist in list_of_list for item in sublist]
 
-path_to_training = Path("data/training")
-path_to_test = Path("data/test")
+path_to_training = Path("training")
+path_to_test = Path("test")
 
 #####
 # training and test sets of transcription ids
@@ -29,19 +29,18 @@ for transcription_id in test_set:
     
     test_labels[transcription_id] = [1] * len(transcription)
 
-with open("data/test_labels_naive_baseline.json", "w") as file:
+with open("test_labels_naive_baseline.json", "w") as file:
     json.dump(test_labels, file, indent=4)
 
 #####
 # text_baseline: utterances are embedded with SentenceTransformer, then train a classifier.
 #####
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import f1_score
+from xgboost import XGBClassifier
 from sentence_transformers import SentenceTransformer
-bert = SentenceTransformer('all-MiniLM-L6-v2')
+bert = SentenceTransformer('roberta-base')
 
 y_training = []
-with open("data/training_labels.json", "r") as file:
+with open("training_labels.json", "r") as file:
     training_labels = json.load(file)
 X_training = []
 for transcription_id in training_set:
@@ -55,30 +54,28 @@ for transcription_id in training_set:
 
 X_training = bert.encode(X_training, show_progress_bar=True)
 
-clf = DecisionTreeClassifier(random_state=0)
+print(X_training.shape)
+scale_pos_weight = (len(y_training)/sum(y_training)) ** 0.9
+clf = XGBClassifier(n_estimators=1024, max_depth=3, learning_rate=0.1, objective='binary:logistic', device='cuda', scale_pos_weight=scale_pos_weight)
 clf.fit(X_training, y_training)
 
-# test_labels = {}
-# for transcription_id in test_set:
-#     with open(path_to_test / f"{transcription_id}.json", "r") as file:
-#         transcription = json.load(file)
+from sklearn.metrics import classification_report
+
+print(classification_report(y_true= y_training, y_pred=clf.predict(X_training)))
+
+test_labels = {}
+for transcription_id in test_set:
+    with open(path_to_test / f"{transcription_id}.json", "r") as file:
+        transcription = json.load(file)
     
-#     X_test = []
-#     for utterance in transcription:
-#         X_test.append(utterance["speaker"] + ": " + utterance["text"])
+    X_test = []
+    for utterance in transcription:
+        X_test.append(utterance["speaker"] + ": " + utterance["text"])
     
-#     X_test = bert.encode(X_test)
+    X_test = bert.encode(X_test)
 
-#     y_test = clf.predict(X_test)
-#     test_labels[transcription_id] = y_test.tolist()
+    y_test = clf.predict(X_test)
+    test_labels[transcription_id] = y_test.tolist()
 
-    
-# with open("data/test_labels_text_baseline.json", "w") as file:
-#     json.dump(test_labels, file, indent=4)
-
-y_train_pred_list = clf.predict(X_training).tolist()
-acc = sum([y == y_hat for y, y_hat in zip(y_training, y_train_pred_list)]) / len(y_train_pred_list)
-print(acc)
-
-f1 = f1_score(y_training, y_train_pred_list)
-print(f1)
+with open("test_labels_text_baseline.json", "w") as file:
+    json.dump(test_labels, file, indent=4)
