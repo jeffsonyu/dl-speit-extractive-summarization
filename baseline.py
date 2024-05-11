@@ -4,8 +4,8 @@ from pathlib import Path
 def flatten(list_of_list):
     return [item for sublist in list_of_list for item in sublist]
 
-path_to_training = Path("training")
-path_to_test = Path("test")
+path_to_training = Path("data/training")
+path_to_test = Path("data/test")
 
 #####
 # training and test sets of transcription ids
@@ -29,7 +29,7 @@ for transcription_id in test_set:
     
     test_labels[transcription_id] = [1] * len(transcription)
 
-with open("test_labels_naive_baseline.json", "w") as file:
+with open("data/test_labels_naive_baseline.json", "w") as file:
     json.dump(test_labels, file, indent=4)
 
 #####
@@ -40,7 +40,7 @@ from sentence_transformers import SentenceTransformer
 bert = SentenceTransformer('roberta-base')
 
 y_training = []
-with open("training_labels.json", "r") as file:
+with open("data/training_labels.json", "r") as file:
     training_labels = json.load(file)
 X_training = []
 for transcription_id in training_set:
@@ -59,9 +59,11 @@ scale_pos_weight = (len(y_training)/sum(y_training)) ** 0.9
 clf = XGBClassifier(n_estimators=1024, max_depth=3, learning_rate=0.1, objective='binary:logistic', device='cuda', scale_pos_weight=scale_pos_weight)
 clf.fit(X_training, y_training)
 
-from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score, classification_report
 
-print(classification_report(y_true= y_training, y_pred=clf.predict(X_training)))
+y_training_pred = clf.predict(X_training)
+print(classification_report(y_true= y_training, y_pred=y_training_pred))
+print(accuracy_score(y_training, y_training_pred))
 
 test_labels = {}
 for transcription_id in test_set:
@@ -77,5 +79,5 @@ for transcription_id in test_set:
     y_test = clf.predict(X_test)
     test_labels[transcription_id] = y_test.tolist()
 
-with open("test_labels_text_baseline.json", "w") as file:
+with open("data/test_labels_text_baseline.json", "w") as file:
     json.dump(test_labels, file, indent=4)
