@@ -52,7 +52,7 @@ class DLDataset(Dataset):
         return len(self.X_training) if self.split == "train" else len(self.X_test)
 
     def __getitem__(self, index):
-        item_dict = {}
+        # item_dict = {}
         if self.split == "train":
             return self.X_training[index], self.y_training[index]
         else:
