@@ -31,8 +31,10 @@ class SuperRGCNLayer(nn.Module):
         self.weight = nn.Parameter(
             torch.Tensor(num_bases, in_feature_dim, out_feature_dim)
         )
+
+        ## change here
         self.w_comp = nn.Parameter(
-            torch.Tensor(num_relation_types, num_bases)
+            torch.Tensor(num_relation_types * num_node_types * num_node_types, num_bases)
         )
 
         self.node_type_embd = nn.Parameter(
@@ -59,19 +61,22 @@ class SuperRGCNLayer(nn.Module):
         weight = self.weight.view(
             self.out_feature_dim, self.num_base, self.in_feature_dim
         )
-        print(torch.matmul(self.w_comp, weight).shape, self.w_comp.shape, weight.shape, self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
-        weight = torch.matmul(self.w_comp, weight).view(self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
+        # print(torch.matmul(self.w_comp, weight).shape, self.w_comp.shape, weight.shape, self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
+        weight = torch.matmul(self.w_comp, weight).view(self.num_relation_types * self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
+        ## change here
         def message_func(edges):
-            ### For gnn
-            # relation_type_gnn = torch.ones_like(edges.data['type'])
+            # relation_type = edges.data['type']
+            # node_type = edges.src['type'] 
+            # node_val = edges.src['embd'] + self.node_type_embd[node_type]
+            # relation_transition_mtx = weight[relation_type]
+            # shape = node_val.shape
+            # output_shape0 = relation_transition_mtx.shape[1]
+            # ret = F.dropout(torch.bmm(relation_transition_mtx, node_val.view(shape[0], shape[1], 1)).view(shape[0], output_shape0), p=0.1)
             relation_type = edges.data['type']
-            
-            node_type = edges.src['type']
-            # node_dest_type = edges.dest['type']
-            
-            # node_val_new = edges.src['embd']
-            node_val = edges.src['embd'] + self.node_type_embd[node_type]
-            
+            src_node_type = edges.src['type'] 
+            dst_node_type = edges.dst['type']
+            relation_type = src_node_type * self.num_node_types * self.num_relation_types + dst_node_type * self.num_relation_types + relation_type
+            node_val = edges.src['embd'] # + self.node_type_embd[node_type]
             relation_transition_mtx = weight[relation_type]
             shape = node_val.shape
             output_shape0 = relation_transition_mtx.shape[1]

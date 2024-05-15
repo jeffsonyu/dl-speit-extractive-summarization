@@ -1,4 +1,6 @@
+import os
 import json
+import numpy as np
 import dgl
 import dgl.function as fn
 import torch
@@ -11,6 +13,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from sentence_transformers import SentenceTransformer
 
 from network.gnns import SuperGraphModel, SuperRGCNLayer
+# from network.gnns_new import SuperGraphModel, SuperRGCNLayer
 
 def get_file_prefix(is_test: bool) -> List[str]:
     def flatten(list_of_list):
@@ -100,12 +103,10 @@ def get_preprocessed_data(is_test: bool):
     get_preprocessed_data_pat = {'data':{}, 'label': {}}
     static_info = get_statistical_info()
     text_data = process_text_data(is_test)
-    print(text_data[0])
     graph_data = process_graph_data(is_test)
-    print(graph_data[0])
+    
     if not is_test:
         label_data = process_label_data(is_test)
-        print(label_data[0])
 
     bert = SentenceTransformer('roberta-base')
     all_texts = [text[-1] for text in text_data]
@@ -173,14 +174,28 @@ def count_parameters(model):
 
 
 
-def train_pipe(preprocessed_data, labeler, model: nn.Module):
+def train_pipe(preprocessed_data, labeler, model: nn.Module, chkpt: str = None):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
-    epoch_num = 20
-    losser = torch.nn.BCELoss()
-    model.cuda()
+    epoch_num = 50
+    
+    # Prepare weights
+    weight_for_class_0 = 1.0
+    weight_for_class_1 = 3.0  # add the weight of label 1
+    class_weights = torch.tensor([weight_for_class_0, weight_for_class_1], dtype=torch.float32).cuda()
+
+    # # Use weighted loss function
+    criterion = nn.BCELoss(weight=class_weights)
+    
+    best_acc = 0
+    
+    if chkpt is not None:
+        model.load_state_dict(torch.load(os.path.join("ckhpt", chkpt)))
+    
+    count_parameters(model)
+    
+    model.train()
     for epoch in range(1, epoch_num + 1):
         print(f'#### epoch {epoch} ####')
-        count_parameters(model)
         cnt = 0
         data = processed_data_to_dgl_graph(preprocessed_data)
         gl  = len(data.keys())
@@ -194,24 +209,81 @@ def train_pipe(preprocessed_data, labeler, model: nn.Module):
             preds = model(g).reshape(-1)
 
             labels = torch.tensor([labeler[graph_name][i] for i in range(len(labeler[graph_name]))], dtype=torch.float32, device='cuda')
-            loss = losser(preds, labels)
+
+            loss = criterion(preds, labels)
             loss.backward()
             optimizer.step()
             print(f"{cnt}/{gl}, loss: {loss.item()}")
             # print(torch.sum(preds>0.5 == labels>0.5)/labels.shape[0])
+    
+        if (epoch+1) % 5 == 0:
+            print("==================Validation==================")
+            torch.save(model.state_dict(), os.path.join('ckhpt', 'model_rgcn_{:02d}.pth'.format(epoch+1)))
+            acc = validate(model, preprocessed_data, labeler)
+            if acc > best_acc:
+                best_acc = acc
+                torch.save(model.state_dict(), os.path.join('ckhpt', 'model_rgcn.pth'))
             
-    print(classification_report(labels.cpu().numpy(), y_pred=(preds>0.5).cpu().detach().numpy()))
-            # print(preds[0])
-            # print(labels[0])
-                  
+
+def validate(model, preprocessed_data, labeler):
+    data = processed_data_to_dgl_graph(preprocessed_data)
+    gl  = len(data.keys())
+    preds_all = []
+    labels_all = []
+    
+    model.eval()
+    with torch.no_grad():
+        for graph_name in data.keys():
+            g = data[graph_name]
+            g = g.to("cuda")
+            g.ndata["embd"] = g.ndata["embd"].cuda()
+            g.ndata["type"] = g.ndata["type"].cuda()
+            g.edata["type"] = g.edata["type"].cuda()
+            preds = model(g).reshape(-1)
+            labels = torch.tensor([labeler[graph_name][i] for i in range(len(labeler[graph_name]))], dtype=torch.float32, device='cuda')
+            preds_all += (preds>0.5).cpu().detach().numpy().tolist()
+            labels_all += labels.cpu().numpy().tolist()
+            
+    acc = accuracy_score(np.array(labels_all), y_pred=np.array(preds_all))
+    print(classification_report(np.array(labels_all), y_pred=np.array(preds_all)))
+    print(acc)
+    
+    return acc
+
+def test_submission(test_preprocessed_data, model: nn.Module, chkpt: str = None):
+    data = processed_data_to_dgl_graph(test_preprocessed_data)
+    
+    test_labels = {}
+    if chkpt is not None:
+        model.load_state_dict(torch.load(os.path.join("ckhpt", chkpt)))
+    
+    model.eval()
+    with torch.no_grad():
+        for graph_name in data.keys():
+            g = data[graph_name]
+            g = g.to("cuda")
+            g.ndata["embd"] = g.ndata["embd"].cuda()
+            g.ndata["type"] = g.ndata["type"].cuda()
+            g.edata["type"] = g.edata["type"].cuda()
+            preds = model(g).reshape(-1)
+            
+            test_labels[graph_name] = torch.tensor(preds>0.5, dtype=torch.int32).cpu().numpy().tolist()
+            
+    with open("data/test_labels_rgcn.json", "w") as file:
+        json.dump(test_labels, file, indent=4)
 
 if __name__ == '__main__':
-    preprocessed_data = get_preprocessed_data(False)
+    
     model = SuperGraphModel(input_dim=768, 
-                            hidden_dims=[64, 32], 
+                            hidden_dims=[128, 64, 32, 16], 
                             out_dim=1, 
                             num_relation_types=16, 
                             num_node_types=4, 
-                            num_bases=1)
+                            num_bases=4).cuda()
+    
+    preprocessed_data = get_preprocessed_data(is_test=False)
     train_pipe(preprocessed_data, preprocessed_data['label'], model)
+    
+    # test_preprocessed_data = get_preprocessed_data(is_test=True)
+    # test_submission(test_preprocessed_data, model, "model_rgcn_10.pth")
 

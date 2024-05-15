@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from dataset import DLDataset
 
-from network.decoder import MLPClassfier
+from network.classifier import MLPClassfier, CNNClassifier
 from sentence_transformers import SentenceTransformer
 
 def parse_args():
@@ -13,12 +13,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a model')
     parser.add_argument('--device', type=str, default='cuda:0', help='model type')
     parser.add_argument('--data', type=str, default='data', help='data directory')
+    parser.add_argument('--type', type=str, default='mlp', help='model path')
     parser.add_argument('--model', type=str, default=None, help='model path')
     parser.add_argument('--batch-size', type=int, default=64, help='batch size')
     parser.add_argument('--epochs', type=int, default=20, help='number of epochs')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--seed', type=int, default=0, help='random seed')
-    parser.add_argument('--output', type=str, default='output', help='output directory')
     return parser.parse_args()
 
 def main(args):
@@ -34,7 +34,11 @@ def main(args):
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     # Load model
-    model = MLPClassfier(nn_channels=[768, 128, 32, 16, 2])
+    model_type = args.type
+    if model_type == 'mlp':
+        model = MLPClassfier(nn_channels=[768, 128, 32, 16, 2])
+    elif model_type == 'cnn':
+        model = CNNClassifier()
     model.to(args.device)
     
     # Bert encoder
@@ -47,7 +51,15 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Set loss function
-    criterion = nn.CrossEntropyLoss()
+    # Prepare weights
+    weight_for_class_0 = 1.0
+    weight_for_class_1 = 3.0  # add the weight of label 1
+
+    #  Convert to Tensor and move to the correct device
+    class_weights = torch.tensor([weight_for_class_0, weight_for_class_1], dtype=torch.float32).to(args.device)
+
+    # # Use weighted loss function
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     # Train
     os.makedirs('ckhpt', exist_ok=True)
@@ -73,16 +85,12 @@ def main(args):
         
         if (epoch+1) % 10 == 0:
             acc = validate(model, train_loader, bert, args.device)
-            torch.save(model.state_dict(), os.path.join('ckhpt', 'model_mlp_{:02d}.pth'.format(epoch+1)))
+            torch.save(model.state_dict(), os.path.join('ckhpt', 'model_{}_{:02d}.pth'.format(model_type, epoch+1)))
             if acc > acc_best:
                 acc_best = acc
-                torch.save(model.state_dict(), os.path.join('ckhpt', 'model_mlp.pth'))
-
-    # Save model
-    os.makedirs(args.output, exist_ok=True)
-    torch.save(model.state_dict(), os.path.join(args.output, 'model_mlp.pth'))
+                torch.save(model.state_dict(), os.path.join('ckhpt', 'model_{}.pth'.format(model_type)))
     
-    test(model, test_dataset, bert, args.device)
+    test(model_type, model, test_dataset, bert, args.device)
 
 def validate(model, loader, bert, device):
     model.eval()
@@ -104,7 +112,7 @@ def validate(model, loader, bert, device):
     
     return accuracy
 
-def test(model, test_dataset, bert, device):
+def test(model_type, model, test_dataset, bert, device):
     model.eval()
     
     test_labels = {}
@@ -124,7 +132,7 @@ def test(model, test_dataset, bert, device):
             _, y_test = torch.max(outputs.data, 1)
         test_labels[transcription_id] = y_test.detach().cpu().numpy().tolist()
 
-    with open("data/test_labels_baseline.json", "w") as file:
+    with open(f"data/test_labels_{model_type}.json", "w") as file:
         json.dump(test_labels, file, indent=4)
     
 if __name__ == '__main__':
