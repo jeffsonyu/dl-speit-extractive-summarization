@@ -59,7 +59,6 @@ class SuperRGCNLayer(nn.Module):
         weight = self.weight.view(
             self.out_feature_dim, self.num_base, self.in_feature_dim
         )
-        print(torch.matmul(self.w_comp, weight).shape, self.w_comp.shape, weight.shape, self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
         weight = torch.matmul(self.w_comp, weight).view(self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
         def message_func(edges):
             ### For gnn
