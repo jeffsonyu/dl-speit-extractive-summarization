@@ -69,7 +69,9 @@ if __name__ == "__main__":
     
     for batch_idx, batch in enumerate(train_dataloader):
         x, y = batch
+        print(x)
         y = y.to(device)
+        print(y.size())
         X_encode = bert.encode(x, show_progress_bar=True)
         
         X_encode = torch.tensor(X_encode, dtype=torch.float32, device=device)

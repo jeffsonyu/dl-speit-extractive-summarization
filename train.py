@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import json
 import torch
 from torch import nn
 from dataset import DLDataset
@@ -14,7 +15,7 @@ def parse_args():
     parser.add_argument('--data', type=str, default='data', help='data directory')
     parser.add_argument('--model', type=str, default=None, help='model path')
     parser.add_argument('--batch-size', type=int, default=64, help='batch size')
-    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=20, help='number of epochs')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--output', type=str, default='output', help='output directory')
@@ -33,14 +34,14 @@ def main(args):
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     # Load model
-    model = MLPClassfier(768, 128, 2)
+    model = MLPClassfier(nn_channels=[768, 128, 32, 16, 2])
     model.to(args.device)
     
     # Bert encoder
     bert = SentenceTransformer('roberta-base').to(args.device)
     
     if args.model is not None:
-        model.load_state_dict(torch.load("ckhpt", os.path.join(args.model)))
+        model.load_state_dict(torch.load(os.path.join("ckhpt", args.model)))
 
     # Set optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -56,6 +57,7 @@ def main(args):
         for batch_idx, batch in enumerate(train_loader):
             x, y = batch
             y = y.to(args.device)
+            
             X_encode = bert.encode(x)
             X_encode = torch.tensor(X_encode).to(args.device)
             
@@ -78,7 +80,9 @@ def main(args):
 
     # Save model
     os.makedirs(args.output, exist_ok=True)
-    torch.save(model.state_dict(), os.path.join(args.output, 'model.pth'))
+    torch.save(model.state_dict(), os.path.join(args.output, 'model_mlp.pth'))
+    
+    test(model, test_dataset, bert, args.device)
 
 def validate(model, loader, bert, device):
     model.eval()
@@ -99,7 +103,29 @@ def validate(model, loader, bert, device):
     print(f'Validation Accuracy: {accuracy:.2f}%')
     
     return accuracy
+
+def test(model, test_dataset, bert, device):
+    model.eval()
     
+    test_labels = {}
+    for transcription_id in test_dataset.test_set:
+        with open(f"{test_dataset.data_dir}/test/{transcription_id}.json", "r") as file:
+                transcription = json.load(file)
+        
+        X_test = []
+        for utterance in transcription:
+            X_test.append(utterance["speaker"] + ": " + utterance["text"])
+        
+        X_encode = bert.encode(X_test)
+        with torch.no_grad():
+            X_encode = torch.tensor(X_encode).to(device)
+
+            outputs = model(X_encode)
+            _, y_test = torch.max(outputs.data, 1)
+        test_labels[transcription_id] = y_test.detach().cpu().numpy().tolist()
+
+    with open("data/test_labels_baseline.json", "w") as file:
+        json.dump(test_labels, file, indent=4)
     
 if __name__ == '__main__':
     args = parse_args()
