@@ -67,9 +67,6 @@ class SuperRGCNLayer(nn.Module):
             relation_type = edges.data['type']
             
             node_type = edges.src['type']
-            # node_dest_type = edges.dest['type']
-            
-            # node_val_new = edges.src['embd']
             node_val = edges.src['embd'] + self.node_type_embd[node_type]
             
             relation_transition_mtx = weight[relation_type]
@@ -143,7 +140,7 @@ class SuperGraphModel(nn.Module):
     def build_output_layer(self):
         return SuperRGCNLayer(
             self.hidden_dims[-1],
-            1,
+            self.out_dim,
             self.num_bases,
             self.num_relation_types,
             self.num_node_types,
