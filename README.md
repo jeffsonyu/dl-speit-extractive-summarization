@@ -2,7 +2,7 @@
 Shuyao Qi, Jingyan Wang, Zhenjun Yu
 
 ## Overview
-This project aims to train and evaluate text classification models using Multi-Layer Perceptron (MLP) and Convolutional Neural Network (CNN) architectures. The models are trained on a dataset of transcriptions, where each transcription consists of multiple utterances. The project leverages the SentenceTransformer library for encoding the text data and applies class weighting to handle imbalanced classes.
+This project aims to train and evaluate text classification models using different approaches: Multi-Layer Perceptron (MLP), Convolutional Neural Network (CNN), classical machine learning models, and Graph Neural Networks (GNNs). The models are trained on a dataset of transcriptions, where each transcription consists of multiple utterances. The project leverages the SentenceTransformer library for encoding the text data and applies class weighting to handle imbalanced classes.
 
 ## Directory Structure
 ```
@@ -68,7 +68,9 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-To train the model, run the train.py script with the desired parameters. Below is an example command:
+### Training Neural Network Models (MLP/CNN)
+
+To train the model, run the `train.py` script with the desired parameters. Below is an example command:
 ```
 python train.py --device cuda:0 --data data --type mlp --batch-size 64 --epochs 20 --lr 0.001 --seed 42
 ```
@@ -82,7 +84,19 @@ python train.py --device cuda:0 --data data --type mlp --batch-size 64 --epochs 
 - `--lr`: The learning rate.
 - `--seed`: The random seed for reproducibility.
 
-The testing process is integrated within the training script. After training, the model is evaluated on the test dataset, and the predictions are saved in a JSON file and a submission CSV file.
+### Training Baseline Models (XGBoost/Random Forest)
+To train the baseline models, run the `train_naive.py` script:
+```
+python train_naive.py
+```
+This script uses BERT embeddings and trains XGBoost and Random Forest classifiers. It also evaluates the models and generates submission files.
+
+### Training Graph-Based Models (GNN)
+To train the graph-based models, run the `train_graph.py` script:
+```
+python train_graph.py
+```
+This script processes the data into graph structures, trains a Graph Neural Network model, and evaluates its performance.
 
 ## Dataset
 The dataset should be structured in the following format:
@@ -91,7 +105,7 @@ The dataset should be structured in the following format:
 - Test data: `data/test`
 Each transcription should be stored as a JSON file, where each file contains a list of utterances. Each utterance should be a dictionary with `speaker` and `text` keys.
 
-## Examp;e Transcription Format
+## Example Transcription Format
 
 ```
 [
@@ -115,7 +129,11 @@ The MLP classifier is defined with a series of fully connected layers specified 
 The CNN classifier architecture is defined in the `CNNClassifier` class in `network/classifier.py`.
 
 ### Output
-The trained models are saved in the `ckhpt` directory. The test predictions are saved in `data/test_labels_mlp.json` (for MLP) and `data/test_labels_cnn.json` (for CNN). The submission files are created as `submission_mlp.csv` and `submission_cnn.csv`.
+The trained models are saved in the ckhpt directory. The test predictions are saved in JSON files, and submission files are generated as follows:
+
+- `train.py`: Generates `submission_mlp.csv` or `submission_cnn.csv`.
+- `train_naive.py`: Generates `submission_baseline.csv` and `submission_baseline_rf.csv`.
+- `train_graph.py`: Generates `submission_rgcn.csv`.
 
 ### Submission
 To create a submission file, the `make_submission` function is used. It converts the JSON test labels into a CSV file suitable for submission.
