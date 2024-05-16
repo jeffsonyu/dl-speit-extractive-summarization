@@ -20,18 +20,13 @@ This project aims to train and evaluate text classification models using differe
 │   └── training_labels.json
 ├── network
 │   ├── classifier.py
-│   ├── gnns_new.py
 │   └── gnns.py
 ├── .gitignore
 ├── baseline.py
 ├── dataset.py
 ├── make_submission.py
-├── model_rgcn.ipynb
 ├── README.md
 ├── requirements.txt
-├── submission_naive_baseline.csv
-├── test_labels_naive_baseline.json
-├── test.py
 ├── train_graph.py
 ├── train_naive.py
 └── train.py
