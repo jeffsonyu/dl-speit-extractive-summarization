@@ -7,11 +7,9 @@ This project aims to train and evaluate text classification models using differe
 ## Directory Structure
 ```
 .
-├── all-MiniLM-L6-v2
-│   └── (model files for MiniLM)
 ├── ckhpt
-│   ├── model_mlp_10.pth
-│   └── model_mlp.pth
+│   ├── model_mlp.pth
+│   └── ...
 ├── data
 │   ├── test
 │   │   └── (test data files)
@@ -40,25 +38,17 @@ This project aims to train and evaluate text classification models using differe
 
 ```
 
-## Requirements
-
-- Python 3.7+
-- torch 1.7.1+
-- numpy 1.19.2+
-- sentence-transformers 0.4.1+
-- scikit-learn 0.24.1+
-
 
 ## Installation
 1. Clone the repository:
 ```
 git clone https://github.com/jeffsonyu/dl-speit-extractive-summarization.git
-cd text-classification
+cd dl-speit-extractive-summarization
 ```
 
 2. Create a conda environment and activate it:
 ```
-conda create -n daidaiBird python=3.7
+conda create -n daidaiBird python=3.9
 conda activate daidaiBird
 ```
 

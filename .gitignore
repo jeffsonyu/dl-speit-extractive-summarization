@@ -1,10 +1,6 @@
 __pycache__/
 *.egg-info
-data/
-outputs/
-demo_logs/
-networks/tracking_pipeline_old.py
-networks/tracking_networks.py
 .vscode/
-train_corr.py
-train_transformer.py
+./network/gnns_new.py
+test.py
+ckhpt/*
