@@ -1,5 +1,7 @@
 import json
+import torch
 from pathlib import Path
+from make_submission import make_submission
 
 def flatten(list_of_list):
     return [item for sublist in list_of_list for item in sublist]
@@ -22,6 +24,7 @@ test_set = flatten([[m_id+s_id for s_id in 'abcd'] for m_id in test_set])
 #####
 # text_baseline: utterances are embedded with SentenceTransformer, then train a classifier.
 #####
+from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sentence_transformers import SentenceTransformer
 bert = SentenceTransformer('roberta-base')
@@ -42,16 +45,27 @@ for transcription_id in training_set:
 X_training = bert.encode(X_training, show_progress_bar=True)
 
 scale_pos_weight = (len(y_training)/sum(y_training)) ** 0.9
-clf = XGBClassifier(n_estimators=1024, max_depth=3, learning_rate=0.1, objective='binary:logistic', device='cuda', scale_pos_weight=scale_pos_weight)
+clf = XGBClassifier(n_estimators=1024, max_depth=3, learning_rate=0.1, objective='binary:logistic', scale_pos_weight=scale_pos_weight)
 clf.fit(X_training, y_training)
+
+clf_rf = RandomForestClassifier(n_estimators=1024, max_depth=3, class_weight='balanced')
+clf_rf.fit(X_training, y_training)
 
 from sklearn.metrics import accuracy_score, classification_report
 
 y_training_pred = clf.predict(X_training)
-print(classification_report(y_true= y_training, y_pred=y_training_pred))
+print(classification_report(y_true=y_training, y_pred=y_training_pred))
 print(accuracy_score(y_training, y_training_pred))
 
+y_training_rf_pred = clf_rf.predict(X_training)
+print(classification_report(y_true=y_training, y_pred=y_training_rf_pred))
+print(accuracy_score(y_training, y_training_rf_pred))
+
+
+
+### make submission json
 test_labels = {}
+test_labels_rf = {}
 for transcription_id in test_set:
     with open(path_to_test / f"{transcription_id}.json", "r") as file:
         transcription = json.load(file)
@@ -63,7 +77,15 @@ for transcription_id in test_set:
     X_test = bert.encode(X_test)
 
     y_test = clf.predict(X_test)
+    y_test_rf = clf_rf.predict(X_test)
     test_labels[transcription_id] = y_test.tolist()
+    test_labels_rf[transcription_id] = y_test_rf.tolist()
 
-with open("data/test_labels_text_baseline.json", "w") as file:
+with open("data/test_labels_baseline.json", "w") as file:
     json.dump(test_labels, file, indent=4)
+
+with open("data/test_labels_baseline_rf.json", "w") as file:
+    json.dump(test_labels_rf, file, indent=4)
+
+make_submission("data/test_labels_baseline.json", "submission_baseline.csv")
+make_submission("data/test_labels_baseline_rf.json", "submission_baseline_rf.csv")

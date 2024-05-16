@@ -11,7 +11,7 @@ def flatten(list_of_list):
     
     
 class DLDataset(Dataset):
-    def __init__(self, data_dir, split="train") -> None:
+    def __init__(self, data_dir, split="train", num_0=30000) -> None:
         super().__init__()
         
         self.data_dir = data_dir
@@ -31,14 +31,27 @@ class DLDataset(Dataset):
             training_labels = json.load(file)
             
         self.X_training = []
+        count_0 = 0
         for transcription_id in self.training_set:
             with open(f"{self.data_dir}/training/{transcription_id}.json", "r") as file:
                 transcription = json.load(file)
             
-            for utterance in transcription:
-                self.X_training.append(utterance["speaker"] + ": " + utterance["text"])
+            for i, utterance in enumerate(transcription):
+                if count_0 < num_0:
+                    self.X_training.append(utterance["speaker"] + ": " + utterance["text"])
+                    self.y_training.append(training_labels[transcription_id][i])
+                    count_0 += 1 if training_labels[transcription_id][i] == 0 else 0
+                else:
+                    if training_labels[transcription_id][i] != 0:
+                        self.X_training.append(utterance["speaker"] + ": " + utterance["text"])
+                        self.y_training.append(training_labels[transcription_id][i])
             
-            self.y_training += training_labels[transcription_id]
+            # if count_0 < num_0:
+            #     self.y_training += training_labels[transcription_id]
+            #     count_0 += len(training_labels[transcription_id]) - np.count_nonzero(training_labels[transcription_id])
+            # else:
+            # self.y_training += training_labels[transcription_id]
+            
         
         self.X_test = []
         for transcription_id in self.test_set:

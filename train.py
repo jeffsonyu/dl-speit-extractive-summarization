@@ -7,6 +7,9 @@ from dataset import DLDataset
 
 from network.classifier import MLPClassfier, CNNClassifier
 from sentence_transformers import SentenceTransformer
+from sklearn.metrics import accuracy_score, classification_report
+
+from make_submission import make_submission
 
 def parse_args():
     import argparse
@@ -80,22 +83,25 @@ def main(args):
             loss.backward()
             optimizer.step()
             
-            # print(f'Epoch {epoch+1}/{args.epochs}, Iter {batch_idx+1}/{len(train_loader)}, Loss: {loss.item()}')
         print(f'Epoch {epoch+1}, Loss: {loss.item()}')
         
-        if (epoch+1) % 10 == 0:
+        if (epoch+1) % 5 == 0:
             acc = validate(model, train_loader, bert, args.device)
             torch.save(model.state_dict(), os.path.join('ckhpt', 'model_{}_{:02d}.pth'.format(model_type, epoch+1)))
             if acc > acc_best:
                 acc_best = acc
                 torch.save(model.state_dict(), os.path.join('ckhpt', 'model_{}.pth'.format(model_type)))
     
+    acc = validate(model, train_loader, bert, args.device)
     test(model_type, model, test_dataset, bert, args.device)
 
 def validate(model, loader, bert, device):
     model.eval()
     correct = 0
     total = 0
+    
+    preds_all = []
+    labels_all = []
     with torch.no_grad():
         for x, y in loader:
             y = y.to(device)
@@ -104,13 +110,15 @@ def validate(model, loader, bert, device):
 
             outputs = model(X_encode)
             _, predicted = torch.max(outputs.data, 1)
-            total += y.size(0)
-            correct += (predicted == y).sum().item()
-
-    accuracy = 100 * correct / total
-    print(f'Validation Accuracy: {accuracy:.2f}%')
+            
+            preds_all += predicted.cpu().detach().numpy().tolist()
+            labels_all += y.cpu().numpy().tolist()
     
-    return accuracy
+    acc = accuracy_score(np.array(labels_all), y_pred=np.array(preds_all))
+    print(classification_report(np.array(labels_all), y_pred=np.array(preds_all)))
+    print(acc)
+    
+    return acc
 
 def test(model_type, model, test_dataset, bert, device):
     model.eval()
@@ -134,6 +142,8 @@ def test(model_type, model, test_dataset, bert, device):
 
     with open(f"data/test_labels_{model_type}.json", "w") as file:
         json.dump(test_labels, file, indent=4)
+        
+    make_submission(f"data/test_labels_{model_type}.json", f"submission_{model_type}.csv")
     
 if __name__ == '__main__':
     args = parse_args()

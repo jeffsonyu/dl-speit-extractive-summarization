@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 
-def make_submission(json_path: Path = Path("data/test_labels_baseline.json")):
+def make_submission(json_path: Path = Path("data/test_labels_rgcn.json"), out_path: Path = Path("submission.csv")):
     with open(json_path, "r") as file:
         test_labels = json.load(file)
 
-    file = open("submission.csv", "w")
+    file = open(out_path, "w")
     file.write("id,target_feature\n")
     for key, value in test_labels.items():
         u_id = [key + "_" + str(i) for i in range(len(value))]

@@ -15,6 +15,8 @@ from sentence_transformers import SentenceTransformer
 from network.gnns import SuperGraphModel, SuperRGCNLayer
 # from network.gnns_new import SuperGraphModel, SuperRGCNLayer
 
+from make_submission import make_submission
+
 def get_file_prefix(is_test: bool) -> List[str]:
     def flatten(list_of_list):
         return [item for sublist in list_of_list for item in sublist]
@@ -180,11 +182,11 @@ def train_pipe(preprocessed_data, labeler, model: nn.Module, chkpt: str = None):
     
     # Prepare weights
     weight_for_class_0 = 1.0
-    weight_for_class_1 = 3.0  # add the weight of label 1
+    weight_for_class_1 = 2.0  # add the weight of label 1
     class_weights = torch.tensor([weight_for_class_0, weight_for_class_1], dtype=torch.float32).cuda()
 
     # # Use weighted loss function
-    criterion = nn.BCELoss(weight=class_weights)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     
     best_acc = 0
     
@@ -206,15 +208,14 @@ def train_pipe(preprocessed_data, labeler, model: nn.Module, chkpt: str = None):
             g.ndata["embd"] = g.ndata["embd"].cuda()
             g.ndata["type"] = g.ndata["type"].cuda()
             g.edata["type"] = g.edata["type"].cuda()
-            preds = model(g).reshape(-1)
-
-            labels = torch.tensor([labeler[graph_name][i] for i in range(len(labeler[graph_name]))], dtype=torch.float32, device='cuda')
-
+            preds = model(g)
+            
+            labels = torch.tensor([labeler[graph_name][i] for i in range(len(labeler[graph_name]))], dtype=torch.long, device='cuda')
+            
             loss = criterion(preds, labels)
             loss.backward()
             optimizer.step()
             print(f"{cnt}/{gl}, loss: {loss.item()}")
-            # print(torch.sum(preds>0.5 == labels>0.5)/labels.shape[0])
     
         if (epoch+1) % 5 == 0:
             print("==================Validation==================")
@@ -227,7 +228,7 @@ def train_pipe(preprocessed_data, labeler, model: nn.Module, chkpt: str = None):
 
 def validate(model, preprocessed_data, labeler):
     data = processed_data_to_dgl_graph(preprocessed_data)
-    gl  = len(data.keys())
+    gl = len(data.keys())
     preds_all = []
     labels_all = []
     
@@ -239,9 +240,11 @@ def validate(model, preprocessed_data, labeler):
             g.ndata["embd"] = g.ndata["embd"].cuda()
             g.ndata["type"] = g.ndata["type"].cuda()
             g.edata["type"] = g.edata["type"].cuda()
-            preds = model(g).reshape(-1)
+            preds = model(g)
+            _, predicted = torch.max(preds.data, 1)
+            
             labels = torch.tensor([labeler[graph_name][i] for i in range(len(labeler[graph_name]))], dtype=torch.float32, device='cuda')
-            preds_all += (preds>0.5).cpu().detach().numpy().tolist()
+            preds_all += predicted.cpu().detach().numpy().tolist()
             labels_all += labels.cpu().numpy().tolist()
             
     acc = accuracy_score(np.array(labels_all), y_pred=np.array(preds_all))
@@ -265,9 +268,10 @@ def test_submission(test_preprocessed_data, model: nn.Module, chkpt: str = None)
             g.ndata["embd"] = g.ndata["embd"].cuda()
             g.ndata["type"] = g.ndata["type"].cuda()
             g.edata["type"] = g.edata["type"].cuda()
-            preds = model(g).reshape(-1)
+            preds = model(g)
+            _, y_test = torch.max(preds.data, 1)
             
-            test_labels[graph_name] = torch.tensor(preds>0.5, dtype=torch.int32).cpu().numpy().tolist()
+            test_labels[graph_name] = y_test.detach().cpu().numpy().tolist()
             
     with open("data/test_labels_rgcn.json", "w") as file:
         json.dump(test_labels, file, indent=4)
@@ -276,14 +280,16 @@ if __name__ == '__main__':
     
     model = SuperGraphModel(input_dim=768, 
                             hidden_dims=[128, 64, 32, 16], 
-                            out_dim=1, 
+                            out_dim=2, 
                             num_relation_types=16, 
                             num_node_types=4, 
-                            num_bases=4).cuda()
+                            num_bases=4,
+                            add_mlp=True).cuda()
     
     preprocessed_data = get_preprocessed_data(is_test=False)
     train_pipe(preprocessed_data, preprocessed_data['label'], model)
     
     # test_preprocessed_data = get_preprocessed_data(is_test=True)
-    # test_submission(test_preprocessed_data, model, "model_rgcn_10.pth")
+    # test_submission(test_preprocessed_data, model, "model_rgcn_45.pth")
+    # make_submission("data/test_labels_rgcn.json", "submission_rgcn.csv")
 
