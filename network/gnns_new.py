@@ -148,7 +148,7 @@ class SuperGraphModel(nn.Module):
     def build_output_layer(self):
         return SuperRGCNLayer(
             self.hidden_dims[-1],
-            1,
+            self.out_dim,
             self.num_bases,
             self.num_relation_types,
             self.num_node_types,

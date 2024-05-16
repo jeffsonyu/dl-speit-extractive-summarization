@@ -14,6 +14,7 @@ class SuperRGCNLayer(nn.Module):
         num_bases: int,
         num_relation_types: int,
         num_node_types: int,
+        add_mlp=False,
         add_bias=None,
         activation=None,
     ):
@@ -27,6 +28,10 @@ class SuperRGCNLayer(nn.Module):
         self.add_bias = add_bias
         if add_bias:
             self.bias = nn.Parameter(torch.Tensor(1,out_feature_dim))
+        
+        self.add_mlp = add_mlp
+        if add_mlp:
+            self.mlp = nn.Linear(out_feature_dim, out_feature_dim)
         self.activation = activation
         self.weight = nn.Parameter(
             torch.Tensor(num_bases, in_feature_dim, out_feature_dim)
@@ -62,8 +67,8 @@ class SuperRGCNLayer(nn.Module):
         weight = torch.matmul(self.w_comp, weight).view(self.num_relation_types, self.out_feature_dim, self.in_feature_dim)
         def message_func(edges):
             ### For gnn
-            # relation_type_gnn = torch.ones_like(edges.data['type'])
-            relation_type = edges.data['type']
+            relation_type = torch.ones_like(edges.data['type'])
+            # relation_type = edges.data['type']
             
             node_type = edges.src['type']
             node_val = edges.src['embd'] + self.node_type_embd[node_type]
@@ -76,6 +81,8 @@ class SuperRGCNLayer(nn.Module):
         
         def apply_func(nodes):
             embd = nodes.data['embd']
+            if self.add_mlp:
+                embd = self.mlp(embd)
             types = nodes.data['type']
             if self.add_bias:
                 embd += self.bias
@@ -92,6 +99,7 @@ class SuperGraphModel(nn.Module):
         out_dim,
         num_relation_types,
         num_node_types,
+        add_mlp,
         num_bases=-1
     ):
         super(SuperGraphModel, self).__init__()
@@ -100,6 +108,7 @@ class SuperGraphModel(nn.Module):
         self.out_dim = out_dim
         self.num_relation_types = num_relation_types
         self.num_node_types = num_node_types
+        self.add_mlp = add_mlp
         self.num_bases = num_bases
 
         self.build_model()
@@ -121,6 +130,7 @@ class SuperGraphModel(nn.Module):
             self.num_bases,
             self.num_relation_types,
             self.num_node_types,
+            add_mlp=self.add_mlp,
             add_bias=True,
             activation=F.relu
         )
@@ -132,6 +142,7 @@ class SuperGraphModel(nn.Module):
             self.num_bases,
             self.num_relation_types,
             self.num_node_types,
+            add_mlp=self.add_mlp,
             add_bias=False,
             activation=F.relu
         )
@@ -143,6 +154,7 @@ class SuperGraphModel(nn.Module):
             self.num_bases,
             self.num_relation_types,
             self.num_node_types,
+            add_mlp=False,
             add_bias=False,
             activation=F.sigmoid,
         )
